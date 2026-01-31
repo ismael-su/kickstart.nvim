@@ -608,7 +608,7 @@ require('lazy').setup({
         ts_ls = {
           filetypes = { 'javascript', 'javascriptreact', 'typescript', 'typescriptreact' },
         },
-        eslint = {},
+       -- eslint = {},
         gopls = {},
         pyright = {
           before_init = function(_, config)
@@ -659,8 +659,11 @@ require('lazy').setup({
       --
       -- You can press `g?` for help in this menu.
       local ensure_installed = vim.tbl_keys(servers or {})
+      ensure_installed = vim.tbl_filter(function(name)
+  	return name ~= "ts_ls"
+      end, ensure_installed)
       vim.list_extend(ensure_installed, {
-        'lua_ls', -- Lua Language server
+        'lua-language-server', -- Lua Language server
         'stylua', -- Used to format Lua code
         'pyright', -- Used for python
         'clangd',
@@ -912,7 +915,7 @@ require('lazy').setup({
   { -- Highlight, edit, and navigate code
     'nvim-treesitter/nvim-treesitter',
     build = ':TSUpdate',
-    main = 'nvim-treesitter.configs', -- Sets main module to use for opts
+    main = 'nvim-treesitter', -- Sets main module to use for opts
     -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
     opts = {
       ensure_installed = {
