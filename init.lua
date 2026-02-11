@@ -608,14 +608,12 @@ require('lazy').setup({
         ts_ls = {
           filetypes = { 'javascript', 'javascriptreact', 'typescript', 'typescriptreact' },
         },
-       -- eslint = {},
+        -- eslint = {},
         gopls = {},
         pyright = {
           before_init = function(_, config)
             local root = config.root_dir
-            if not root then
-              return
-            end
+            if not root then return end
 
             local venv_python = root .. '/.venv/bin/python'
             if vim.fn.executable(venv_python) == 1 then
@@ -659,9 +657,7 @@ require('lazy').setup({
       --
       -- You can press `g?` for help in this menu.
       local ensure_installed = vim.tbl_keys(servers or {})
-      ensure_installed = vim.tbl_filter(function(name)
-  	return name ~= "ts_ls"
-      end, ensure_installed)
+      ensure_installed = vim.tbl_filter(function(name) return name ~= 'ts_ls' end, ensure_installed)
       vim.list_extend(ensure_installed, {
         'lua-language-server', -- Lua Language server
         'stylua', -- Used to format Lua code
@@ -1009,5 +1005,6 @@ require('lazy').setup({
   },
 })
 
+require 'keymaps'
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
