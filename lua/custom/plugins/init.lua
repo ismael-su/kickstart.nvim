@@ -14,6 +14,9 @@ vim.g.clipboard = {
     ['*'] = require('vim.ui.clipboard.osc52').paste '*',
   },
 }
+vim.opt.foldmethod = 'expr'
+vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+vim.opt.foldlevel = 99 -- Ensure files start unfolded
 ---@module 'lazy'
 ---@type LazySpec
 return {}
