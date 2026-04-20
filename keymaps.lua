@@ -6,3 +6,6 @@ vim.keymap.set('n', '<leader>o', '<cmd>Neotree focus<cr>', { desc = 'Focus Explo
 
 vim.keymap.set('n', '<leader>g', '<cmd>Neotree git_status<cr>', { desc = 'Git Explorer' })
 vim.keymap.set('n', '<leader>b', '<cmd>Neotree buffers<cr>', { desc = 'Buffer Explorer' })
+
+-- Claude code
+vim.keymap.set('n', '<leader>cc', '<cmd>ClaudeCode<CR>', { desc = 'Toggle Claude Code' })
