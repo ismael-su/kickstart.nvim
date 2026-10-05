@@ -1,4 +1,0 @@
-doc/tags
-tests/smoke_init.lua
-__pycache__/
-*.pyc
