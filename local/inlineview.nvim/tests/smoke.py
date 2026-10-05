@@ -162,6 +162,30 @@ def main():
         check("no Lua error surfaced", b"E5108" not in out and b"stack traceback" not in out,
               extract_error(out))
 
+        describe("several files in ONE session (regression: autocmd deletion)")
+        # Every other case here starts a fresh Neovim, which is exactly why the
+        # returning-true bug survived: each extension works once per session.
+        out = run_in_pty(
+            nvim + [os.path.join(FIXTURES, "gradient.png")],
+            env_for("iTerm2"),
+            [
+                f":e {FIXTURES}/tall.png\r".encode(),
+                f":e {FIXTURES}/tiny.png\r".encode(),
+                f":e {FIXTURES}/gradient.png\r".encode(),
+                f":e {FIXTURES}/sample.pdf\r".encode(),
+                b":qa!\r",
+            ],
+            settle=3.0,
+            timeout=40.0,
+        )
+        args = extract_osc_args(out)
+        check("every file in the session drew an image", len(args) >= 5,
+              f"only {len(args)} draws for 5 opened files")
+        check("no raw image bytes leaked into the buffer",
+              b"IHDR" not in out and b"%PDF" not in out)
+        check("no Lua error surfaced", b"E5108" not in out and b"stack traceback" not in out,
+              extract_error(out))
+
         describe("the :InlineView command on an explicit path")
         out = run_in_pty(
             nvim,

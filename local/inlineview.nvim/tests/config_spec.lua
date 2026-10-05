@@ -91,6 +91,54 @@ describe('plugin surface', function()
     ok(vim.tbl_contains(patterns, '*.pdf'), 'pdf not intercepted')
   end)
 
+  --- Regression: the handler used to `return true`, and |nvim_create_autocmd|
+  --- deletes any callback that returns true. Each extension therefore
+  --- displayed correctly exactly once per session and showed raw bytes after
+  --- that. A per-file test could never catch it -- it needs one session that
+  --- opens several files.
+  it('keeps its BufReadCmd handlers after displaying files', function()
+    require('inlineview').setup {}
+    local function count() return #vim.api.nvim_get_autocmds { group = 'inlineview', event = 'BufReadCmd' } end
+
+    local before = count()
+    ok(before > 0, 'no BufReadCmd handlers registered')
+
+    local bufs = {}
+    for _, name in ipairs { 'gradient.png', 'tall.png', 'tiny.png', 'sample.pdf' } do
+      vim.cmd('edit ' .. vim.fn.fnameescape(FIXTURES .. '/' .. name))
+      local buf = vim.api.nvim_get_current_buf()
+      bufs[#bufs + 1] = buf
+      eq(before, count(), 'handlers must survive opening ' .. name)
+      ok(require('inlineview.viewer').get(buf), name .. ' was not displayed')
+      eq('nofile', vim.bo[buf].buftype, name .. ' was loaded as text')
+    end
+
+    -- Re-open the first extension a second time: this is what actually broke.
+    vim.cmd('edit ' .. vim.fn.fnameescape(FIXTURES .. '/gradient.png'))
+    local again = vim.api.nvim_get_current_buf()
+    ok(require('inlineview.viewer').get(again), 'the second PNG fell back to raw bytes')
+
+    vim.cmd 'enew'
+    for _, b in ipairs(bufs) do
+      if vim.api.nvim_buf_is_valid(b) then pcall(vim.api.nvim_buf_delete, b, { force = true }) end
+    end
+  end)
+
+  it('loads the file as text rather than nothing when auto_open is off', function()
+    -- BufReadCmd swallows the read, so opting out must still produce content.
+    require('inlineview').setup { auto_open = false }
+    eq(0, #vim.api.nvim_get_autocmds { group = 'inlineview', event = 'BufReadCmd' })
+
+    vim.cmd('edit ' .. vim.fn.fnameescape(FIXTURES .. '/gradient.png'))
+    local buf = vim.api.nvim_get_current_buf()
+    falsy(require('inlineview.viewer').get(buf), 'should not have been displayed')
+    ok(vim.api.nvim_buf_line_count(buf) > 0, 'buffer must not be empty')
+
+    vim.cmd 'enew'
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    require('inlineview').setup {}
+  end)
+
   it('is idempotent across repeated setup calls', function()
     local inlineview = require 'inlineview'
     inlineview.setup { fit = 'width' }

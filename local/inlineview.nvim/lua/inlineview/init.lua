@@ -34,6 +34,23 @@ local function file_patterns()
   return patterns
 end
 
+--- Load `path` into `buf` as ordinary text.
+---
+--- `BufReadCmd` takes over the read completely and Neovim will not fall back
+--- on its own, so declining to display a file makes us responsible for
+--- loading it. Without this the user gets a silently empty buffer.
+---@param buf integer
+---@param path string
+local function read_fallback(buf, path)
+  vim.bo[buf].buftype = ''
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_call(buf, function()
+    pcall(vim.cmd, ('keepalt noautocmd silent! read ++edit %s'):format(vim.fn.fnameescape(path)))
+    pcall(vim.cmd, 'silent! 1delete _') -- drop the blank line `read` leaves behind
+  end)
+  vim.bo[buf].modified = false
+end
+
 local function create_autocmds()
   group = vim.api.nvim_create_augroup('inlineview', { clear = true })
 
@@ -43,19 +60,23 @@ local function create_autocmds()
   end
 
   -- Intercept the read so Neovim never loads binary content into the buffer.
-  au('BufReadCmd', {
-    pattern = file_patterns(),
-    callback = function(ev)
-      if not config.options.auto_open then return false end
-      local ok, err = viewer.open_in_buffer(ev.buf, ev.match)
-      if not ok then
-        util.warn(err or 'cannot open')
-        return false
-      end
-      return true
-    end,
-    desc = 'inlineview: display images/PDFs instead of reading them',
-  })
+  --
+  -- The callback must not return a truthy value: |nvim_create_autocmd|
+  -- deletes any callback that returns true, which would make each extension
+  -- display correctly exactly once per session and show raw bytes after that.
+  if config.options.auto_open then
+    au('BufReadCmd', {
+      pattern = file_patterns(),
+      callback = function(ev)
+        local ok, err = viewer.open_in_buffer(ev.buf, ev.match)
+        if not ok then
+          util.warn(err or 'cannot open')
+          read_fallback(ev.buf, ev.match)
+        end
+      end,
+      desc = 'inlineview: display images/PDFs instead of reading them',
+    })
+  end
 
   -- Anything that may have scrolled or resized the image out of place.
   au({ 'WinScrolled', 'WinResized', 'TabEnter', 'FocusGained', 'CmdlineLeave', 'BufWinEnter', 'WinEnter' }, {
