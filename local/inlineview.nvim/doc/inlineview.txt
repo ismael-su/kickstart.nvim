@@ -1,0 +1,267 @@
+*inlineview.txt*            View images and PDFs inside Neovim
+
+Author:  built for ismael-su/kickstart.nvim
+License: same as Neovim
+
+==============================================================================
+CONTENTS                                                *inlineview-contents*
+
+    1. Introduction .......................... |inlineview-introduction|
+    2. Requirements .......................... |inlineview-requirements|
+    3. Usage ................................. |inlineview-usage|
+    4. Mappings .............................. |inlineview-mappings|
+    5. Commands .............................. |inlineview-commands|
+    6. Configuration ......................... |inlineview-configuration|
+    7. Inline rendering ...................... |inlineview-inline|
+    8. How it works .......................... |inlineview-internals|
+    9. Troubleshooting ....................... |inlineview-troubleshooting|
+
+==============================================================================
+1. INTRODUCTION                                     *inlineview-introduction*
+
+inlineview draws real images and PDF pages in the terminal, positioned inside
+Neovim windows. Opening a picture or a PDF just works: >
+
+    nvim diagram.png
+    nvim report.pdf
+<
+Both render in place. PDFs are paged, zoomable and pannable. In markdown and
+similar filetypes, `![alt](path)` links are rendered beneath the link.
+
+Three display backends are supported, chosen automatically:
+
+    iterm2     iTerm2's inline image protocol (OSC 1337). True pixels.
+    kitty      Kitty graphics protocol: Kitty, Ghostty, WezTerm. True pixels.
+    blocks     Unicode half-blocks via chafa. Works in any truecolor terminal.
+
+Detection works through SSH. iTerm2 forwards `LC_TERMINAL`, which is how a
+remote Neovim knows what it is talking to.
+
+==============================================================================
+2. REQUIREMENTS                                     *inlineview-requirements*
+
+Required ~
+    Neovim 0.10+        (uses |vim.base64|, |vim.system|, |vim.uv|)
+    A capable terminal  (see above)
+
+Optional ~
+    poppler-utils       PDF support: `pdftoppm` and `pdfinfo`.
+                        Without it, images still work.
+    chafa               The half-block fallback for terminals with no
+                        image protocol.
+    python3             Probes the terminal's pixel-per-cell size so that
+                        images are not stretched. Without it, the configured
+                        `cell` values are used.
+
+Install on Debian/Ubuntu: >
+
+    sudo apt install poppler-utils chafa
+<
+On macOS: >
+
+    brew install poppler chafa
+<
+Run |:checkhealth| `inlineview` to see what was found.
+
+==============================================================================
+3. USAGE                                                   *inlineview-usage*
+
+Open a file directly, and it is displayed rather than loaded as text: >
+
+    nvim photo.jpg
+    :e report.pdf
+<
+Or open any file in a floating viewer without changing buffers: >
+
+    :InlineView path/to/chart.png
+    :InlineView                     " the current buffer's file
+<
+                                                      *inlineview-pdf-zoom*
+Zooming a PDF does not magnify pixels. The page is re-rasterized at a higher
+dpi and only the visible part is drawn, so small text gets sharper. Pan around
+the enlarged page with `h` `j` `k` `l`.
+
+==============================================================================
+4. MAPPINGS                                             *inlineview-mappings*
+
+These are local to a viewer buffer.
+
+    q, <Esc>        close the viewer
+    n, <C-n>        next page                                  (PDF)
+    p, <C-p>        previous page                              (PDF)
+    gg              first page                                 (PDF)
+    G               last page                                  (PDF)
+    {count}%        jump to page {count}, e.g. `12%`           (PDF)
+    +, =            zoom in
+    -, _            zoom out
+    0               reset zoom and pan
+    h j k l         pan when zoomed in                         (PDF)
+    w               fit to window width
+    f               fit the whole thing in the window
+    <C-l>           force a repaint
+    ?               show this list
+
+Set `keymaps.enabled = false` to install none of them.
+
+The config also adds, outside the viewer:
+
+    <leader>iv      view the current file
+    <leader>ii      toggle inline rendering in this buffer
+    <leader>ir      re-probe the terminal and repaint
+
+==============================================================================
+5. COMMANDS                                             *inlineview-commands*
+
+                                                                *:InlineView*
+:InlineView [{path}]    Open {path}, or the current buffer's file, in a
+                        floating viewer.
+
+                                                           *:InlineViewClose*
+:InlineViewClose        Close the current viewer.
+
+                                                         *:InlineViewRefresh*
+:InlineViewRefresh      Re-probe the terminal (cell size, backend) and repaint
+                        everything. Use after changing the font size.
+
+                                                           *:InlineViewClear*
+:InlineViewClear        Erase every image this plugin has drawn. Use if a
+                        stale image is left on screen.
+
+                                                          *:InlineViewInline*
+:InlineViewInline       Toggle in-buffer rendering of image links for the
+                        current buffer. See |inlineview-inline|.
+
+                                                            *:InlineViewInfo*
+:InlineViewInfo         Report the detected backend, cell size and screen
+                        geometry. Useful when filing a bug.
+
+==============================================================================
+6. CONFIGURATION                                   *inlineview-configuration*
+
+Defaults, all optional: >lua
+
+    require('inlineview').setup {
+      -- "auto" | "iterm2" | "kitty" | "blocks" | "none"
+      backend = 'auto',
+
+      -- Floating viewer size, as a fraction of the editor.
+      width = 0.9,
+      height = 0.9,
+
+      -- "contain" fit inside, never enlarge
+      -- "fit"     fit inside, enlarging to fill
+      -- "width"   match window width
+      -- "height"  match window height
+      -- "original" 1:1 pixels
+      fit = 'contain',
+
+      zoom_step = 1.25,
+
+      -- Pixel size of a terminal cell. Probed at runtime; these are only the
+      -- fallback if the probe fails. Set them if images look stretched.
+      cell = { width = 7, height = 15 },
+
+      pdf = {
+        min_dpi = 36,
+        max_dpi = 400,
+        prefetch = 1,       -- render N pages ahead in the background
+      },
+
+      -- Display images/PDFs instead of loading them as text.
+      auto_open = true,
+
+      filetypes = {
+        image = { 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp',
+                  'avif', 'tiff', 'tif', 'ico' },
+        pdf = { 'pdf' },
+      },
+
+      inline = {
+        enabled = true,
+        filetypes = { 'markdown', 'vimwiki', 'rmd', 'quarto', 'norg', 'org' },
+        max_rows = 20,      -- ceiling on rows one inline image may use
+        render_margin = 20, -- only draw links within N lines of the viewport
+      },
+
+      debounce = 40,        -- ms to coalesce repaints while scrolling
+
+      keymaps = { enabled = true },
+    }
+<
+Note that `filetypes.image`, `filetypes.pdf` and `inline.filetypes` are
+*replaced* by what you pass, not merged, so a shorter list really is shorter.
+
+==============================================================================
+7. INLINE RENDERING                                       *inlineview-inline*
+
+In the configured filetypes, these are recognised and rendered in place: >
+
+    ![alt text](diagram.png)
+    ![spec](design.pdf)             " first page
+    [[file:photo.jpg]]
+    <img src="chart.png">
+<
+Relative paths resolve against the file's own directory, then the working
+directory. Remote URLs are skipped -- nothing is downloaded.
+
+Space is reserved with virtual lines, so surrounding text reflows correctly
+and scrolling behaves normally. Toggle per buffer with |:InlineViewInline|.
+
+==============================================================================
+8. HOW IT WORKS                                        *inlineview-internals*
+
+Neovim has no concept of images: everything here is escape sequences written
+straight to the terminal, positioned over cells Neovim believes are blank.
+
+Consequences worth knowing:
+
+- An image is erased whenever Neovim repaints those cells. The plugin
+  repaints on scroll, resize, tab switch and after the command line closes.
+  If something still manages to clobber an image, `<C-l>` fixes it.
+
+- Placement comes from |screenpos()| on a reserved buffer line, so borders,
+  sign columns and winbars are accounted for automatically.
+
+- Images are never drawn into the last screen row. Doing so makes the
+  terminal scroll, which would shift Neovim's screen without it knowing.
+
+- Under tmux, sequences are wrapped in passthrough. This requires: >
+
+      set -g allow-passthrough on
+<
+- Image dimensions are parsed from file headers in Lua (PNG, JPEG, GIF, BMP,
+  WebP, TIFF, AVIF, ICO), so displaying an image needs no external tools at
+  all. Only PDFs shell out, to poppler.
+
+==============================================================================
+9. TROUBLESHOOTING                                *inlineview-troubleshooting*
+
+Run |:checkhealth| `inlineview` first; it checks every dependency.
+
+Nothing is drawn ~
+    Run |:InlineViewInfo|. If the backend is `blocks` or `none`, your terminal
+    was not recognised. Over SSH, iTerm2 needs `LC_TERMINAL` forwarded, which
+    requires `AcceptEnv LC_*` in the remote `sshd_config` (usually the
+    default). You can always force it with `backend = 'iterm2'`.
+
+Images look squashed or stretched ~
+    The cell size probe failed and the fallback does not match your font.
+    Check |:InlineViewInfo| and set `cell = { width = W, height = H }` to your
+    terminal's real pixel-per-cell values.
+
+Images disappear while scrolling ~
+    Expected, briefly: the repaint is debounced. Lower `debounce` if it
+    bothers you, at the cost of more redraw traffic.
+
+Stale images pile up ~
+    |:InlineViewClear|. iTerm2's protocol has no delete operation, so clearing
+    means forcing Neovim to repaint over the top.
+
+PDFs do nothing ~
+    poppler is missing. Install `poppler-utils`.
+
+Nothing works inside tmux ~
+    `set -g allow-passthrough on` in your tmux config, then restart tmux.
+
+==============================================================================
+vim:tw=78:ts=8:noet:ft=help:norl:
